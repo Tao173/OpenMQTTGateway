@@ -1,7 +1,7 @@
 /*  
-  OpenMQTTGateway  - ESP8266 or Arduino program for home automation 
+  Theengs OpenMQTTGateway - We Unite Sensors in One Open-Source Interface
 
-   Act as a wifi or ethernet gateway between your 433mhz/infrared IR signal  and a MQTT broker 
+   Act as a gateway between your 433mhz, infrared IR, BLE, LoRa signal and one interface like an MQTT broker 
    Send and receiving command by MQTT
  
   This gateway enables to set your parameters for the 2G gateway
@@ -27,9 +27,9 @@
 #define config_2G_h
 
 extern void setup2G();
-extern bool _2GtoMQTT();
-extern void MQTTto2G(char* topicOri, char* datacallback);
-extern void MQTTto2G(char* topicOri, JsonObject& SMSdata);
+extern bool _2GtoX();
+extern void Xto2G(const char* topicOri, const char* datacallback);
+extern void Xto2G(const char* topicOri, JsonObject& SMSdata);
 /*-------------------2G topics & parameters----------------------*/
 //433Mhz MQTT Subjects and keys
 #define subjectMQTTto2G    "/commands/MQTTto2G"

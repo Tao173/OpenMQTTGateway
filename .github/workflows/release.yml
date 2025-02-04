@@ -9,17 +9,21 @@ jobs:
     runs-on: ubuntu-latest
     name: Build and upload Assets to Release
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
       - name: Set up Python
-        uses: actions/setup-python@v4
+        uses: actions/setup-python@v5
         with:
-          python-version: "3.7"
+          python-version: "3.11"
       - name: Install platformio
         run: |
           python -m pip install --upgrade pip
           pip install platformio
       - name: Set version tag from git
-        run: sed -i "s/version_tag/${GITHUB_REF#refs/tags/}/g" main/User_config.h
+        run: sed -i "s/version_tag/${GITHUB_REF#refs/tags/}/g" main/User_config.h scripts/latest_version.json
+      - name: Extract ESP32 platform version from platformio.ini
+        run: |
+          ESP32_VERSION=$(grep 'esp32_platform\s*=' platformio.ini | cut -d'@' -f2 | tr -d '[:space:]')
+          echo "ESP32_PLATFORM_VERSION=${ESP32_VERSION}" >> $GITHUB_ENV
       - name: Run PlatformIO
         run: platformio run
       - name: Prepare Release Assets

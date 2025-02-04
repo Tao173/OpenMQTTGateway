@@ -6,15 +6,13 @@
 #  include "NimBLEDevice.h"
 #  include "config_BT.h"
 
-extern void pubBT(JsonObject& data);
-
 class zBLEConnect {
 public:
   NimBLEClient* m_pClient;
   TaskHandle_t m_taskHandle = nullptr;
   zBLEConnect(NimBLEAddress& addr) {
     m_pClient = NimBLEDevice::createClient(addr);
-    m_pClient->setConnectTimeout(5);
+    m_pClient->setConnectTimeout(5000);
   }
   virtual ~zBLEConnect() { NimBLEDevice::deleteClient(m_pClient); }
   virtual bool writeData(BLEAction* action);
@@ -38,6 +36,15 @@ class DT24_connect : public zBLEConnect {
 
 public:
   DT24_connect(NimBLEAddress& addr) : zBLEConnect(addr) {}
+  void publishData() override;
+};
+
+class BM2_connect : public zBLEConnect {
+  //std::vector<uint8_t> m_data;
+  void notifyCB(NimBLERemoteCharacteristic* pChar, uint8_t* pData, size_t length, bool isNotify);
+
+public:
+  BM2_connect(NimBLEAddress& addr) : zBLEConnect(addr) {}
   void publishData() override;
 };
 
@@ -72,6 +79,24 @@ class SBS1_connect : public zBLEConnect {
 
 public:
   SBS1_connect(NimBLEAddress& addr) : zBLEConnect(addr) {}
+  bool processActions(std::vector<BLEAction>& actions) override;
+};
+
+class SBBT_connect : public zBLEConnect {
+  uint8_t m_notifyVal;
+  void notifyCB(NimBLERemoteCharacteristic* pChar, uint8_t* pData, size_t length, bool isNotify);
+
+public:
+  SBBT_connect(NimBLEAddress& addr) : zBLEConnect(addr) {}
+  bool processActions(std::vector<BLEAction>& actions) override;
+};
+
+class SBCU_connect : public zBLEConnect {
+  uint8_t m_notifyVal;
+  void notifyCB(NimBLERemoteCharacteristic* pChar, uint8_t* pData, size_t length, bool isNotify);
+
+public:
+  SBCU_connect(NimBLEAddress& addr) : zBLEConnect(addr) {}
   bool processActions(std::vector<BLEAction>& actions) override;
 };
 

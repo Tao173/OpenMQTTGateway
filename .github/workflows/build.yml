@@ -19,7 +19,6 @@ jobs:
           - "esp32dev-gf-sun-inverter"
           - "esp32dev-ir"
           - "esp32dev-ble"
-          - "esp32dev-ble-openhab"
           - "esp32dev-ble-mqtt-undecoded"
           - "esp32dev-ble-aws"
           - "esp32feather-ble"
@@ -34,32 +33,35 @@ jobs:
           - "esp32-m5tough-ble"
           - "esp32-m5stick-c-ble"
           - "esp32-m5stick-cp-ble"
+          - "esp32s3-atomS3U"
           - "esp32-m5atom-matrix"
           - "esp32-m5atom-lite"
           - "esp32dev-rtl_433"
           - "esp32doitv1-aithinker-r01-sx1278"
           - "heltec-rtl_433"
+          - "heltec-rtl_433-fsk"
+          - "heltec-ble"
           - "lilygo-rtl_433"
+          - "lilygo-rtl_433-fsk"
+          - "lilygo-ble"
           - "esp32dev-multi_receiver"
+          - "esp32dev-multi_receiver-pilight"
           - "tinypico-ble"
-          - "ttgo-lora32-v1-868"
-          - "ttgo-lora32-v1-915"
+          - "ttgo-lora32-v1"
+          - "ttgo-lora32-v21"
           - "ttgo-t-beam"
-          - "heltec-wifi-lora-32-868"
-          - "heltec-wifi-lora-32-915"
+          - "heltec-wifi-lora-32"
           - "shelly-plus1"
           - "nodemcuv2-all-test"
           - "nodemcuv2-fastled-test"
           - "nodemcuv2-2g"
           - "nodemcuv2-ir"
-          - "nodemcuv2-rs232"
+          - "nodemcuv2-serial"
           - "avatto-bakeey-ir"
           - "nodemcuv2-rf"
           - "nodemcuv2-rf-cc1101"
           - "nodemcuv2-somfy-cc1101"
           - "manual-wifi-test"
-          - "openhab-test"
-          - "nodemcuv2-mqtt-fw-test"
           - "rf-wifi-gateway"
           - "nodemcuv2-rf2"
           - "nodemcuv2-rf2-cc1101"
@@ -67,31 +69,41 @@ jobs:
           - "nodemcuv2-weatherstation"
           - "sonoff-basic"
           - "sonoff-basic-rfr3"
-          - "atmega-all-test"
-          - "uno-rf"
-          - "uno-fastled"
           - "esp32dev-ble-datatest"
           - "esp32s3-dev-c1-ble"
           - "esp32c3-dev-m1-ble"
           - "airm2m_core_esp32c3"
+          - "esp32c3_lolin_mini"
+          - "esp32c3-m5stamp"
           - "thingpulse-espgateway"
-          - "thingpulse-espgateway-ethernet"
+          - "theengs-bridge"
+          - "esp32dev-ble-idf"
+          - "theengs-bridge-v11"
+          - "theengs-plug"
+          - "esp32dev-ble-broker"
+          - "esp32s3-m5stack-stamps3"
+          - "esp32c3u-m5stamp"
     runs-on: ubuntu-latest
     name: Build with PlatformIO
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
       - name: Set up Python
-        uses: actions/setup-python@v4
+        uses: actions/setup-python@v5
         with:
-          python-version: "3.x"
+          python-version: "3.11"
       - name: Install platformio
         run: |
           python -m pip install --upgrade pip
           pip install platformio
+          pip install setuptools
+      - name: Extract ESP32 platform version from platformio.ini
+        run: |
+          ESP32_VERSION=$(grep 'esp32_platform\s*=' platformio.ini | cut -d'@' -f2 | tr -d '[:space:]')
+          echo "ESP32_PLATFORM_VERSION=${ESP32_VERSION}" >> $GITHUB_ENV
       - name: Run PlatformIO
         run: platformio run -e ${{ matrix.environments }}
       - name: Upload Assets
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: ${{ matrix.environments }}
           path: |
@@ -103,11 +115,14 @@ jobs:
     runs-on: ubuntu-latest
     name: Create the documentation
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
       - name: Set up Node.js
-        uses: actions/setup-node@v3
+        uses: actions/setup-node@v4
         with:
           node-version: "14.x"
+      - name: Download Common Config
+        run: |
+          curl -o docs/.vuepress/public/commonConfig.js https://www.theengs.io/commonConfig.js
       - name: Install build dependencies
         run: npm install
       - name: Build documentation

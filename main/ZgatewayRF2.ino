@@ -1,7 +1,7 @@
 /*  
-  OpenMQTTGateway  - ESP8266 or Arduino program for home automation 
+  Theengs OpenMQTTGateway - We Unite Sensors in One Open-Source Interface
 
-   Act as a wifi or ethernet gateway between your 433mhz/infrared IR signal  and a MQTT broker 
+   Act as a gateway between your 433mhz, infrared IR, BLE, LoRa signal and one interface like an MQTT broker 
    Send and receiving command by MQTT
  
   This gateway enables to:
@@ -55,21 +55,6 @@ struct RF2rxd {
 
 RF2rxd rf2rd;
 
-void setupRF2() {
-#  ifdef ZradioCC1101 //receiving with CC1101
-  ELECHOUSE_cc1101.Init();
-  ELECHOUSE_cc1101.setMHZ(receiveMhz);
-  ELECHOUSE_cc1101.SetRx(receiveMhz);
-#  endif
-  NewRemoteReceiver::init(RF_RECEIVER_GPIO, 2, rf2Callback);
-  Log.notice(F("RF_EMITTER_GPIO: %d " CR), RF_EMITTER_GPIO);
-  Log.notice(F("RF_RECEIVER_GPIO: %d " CR), RF_RECEIVER_GPIO);
-  Log.trace(F("ZgatewayRF2 command topic: %s%s%s" CR), mqtt_topic, gateway_name, subjectMQTTtoRF2);
-  Log.trace(F("ZgatewayRF2 setup done " CR));
-  pinMode(RF_EMITTER_GPIO, OUTPUT);
-  digitalWrite(RF_EMITTER_GPIO, LOW);
-}
-
 #  ifdef ZmqttDiscovery
 //Register for autodiscover in Home Assistant
 void RF2toMQTTdiscovery(JsonObject& data) {
@@ -116,12 +101,10 @@ void RF2toMQTTdiscovery(JsonObject& data) {
 }
 #  endif
 
-void RF2toMQTT() {
+void RF2toX() {
   if (rf2rd.hasNewData) {
-    Log.trace(F("Creating RF2 buffer" CR));
-    StaticJsonDocument<JSON_MSG_BUFFER> jsonBuffer;
-    JsonObject RF2data = jsonBuffer.to<JsonObject>();
-
+    StaticJsonDocument<JSON_MSG_BUFFER> RF2dataBuffer;
+    JsonObject RF2data = RF2dataBuffer.to<JsonObject>();
     rf2rd.hasNewData = false;
 
     Log.trace(F("Rcv. RF2" CR));
@@ -131,11 +114,11 @@ void RF2toMQTT() {
     RF2data["address"] = (unsigned long)rf2rd.address;
     RF2data["switchType"] = (int)rf2rd.switchType;
 #  ifdef ZmqttDiscovery //component creation for HA
-    if (disc)
+    if (SYSConfig.discovery)
       RF2toMQTTdiscovery(RF2data);
 #  endif
-
-    pub(subjectRF2toMQTT, RF2data);
+    RF2data["origin"] = subjectRF2toMQTT;
+    enqueueJsonObject(RF2data);
   }
 }
 
@@ -149,20 +132,16 @@ void rf2Callback(unsigned int period, unsigned long address, unsigned long group
 }
 
 #  if simpleReceiving
-void MQTTtoRF2(char* topicOri, char* datacallback) {
-#    ifdef ZradioCC1101
-  NewRemoteReceiver::disable();
-  disableActiveReceiver();
-  ELECHOUSE_cc1101.Init();
+void XtoRF2(const char* topicOri, const char* datacallback) {
+  disableCurrentReceiver();
   pinMode(RF_EMITTER_GPIO, OUTPUT);
-  ELECHOUSE_cc1101.SetTx(CC1101_FREQUENCY); // set Transmit on
-#    endif
+  initCC1101();
 
   // RF DATA ANALYSIS
   //We look into the subject to see if a special RF protocol is defined
   String topic = topicOri;
   bool boolSWITCHTYPE;
-  boolSWITCHTYPE = to_bool(datacallback);
+  boolSWITCHTYPE = TheengsUtils::to_bool(datacallback);
   bool isDimCommand = false;
 
   long valueCODE = 0;
@@ -245,7 +224,7 @@ void MQTTtoRF2(char* topicOri, char* datacallback) {
     MQTTswitchType = String(boolSWITCHTYPE);
     MQTTdimLevel = String(valueDIM);
     String MQTTRF2string;
-    Log.trace(F("Adv data MQTTtoRF2 push state via RF2toMQTT" CR));
+    Log.trace(F("Adv data XtoRF2 push state via RF2toMQTT" CR));
     if (isDimCommand) {
       MQTTRF2string = subjectRF2toMQTT + String("/") + RF2codeKey + MQTTAddress + String("/") + RF2unitKey + MQTTunit + String("/") + RF2groupKey + MQTTgroupBit + String("/") + RF2dimKey + String("/") + RF2periodKey + MQTTperiod;
       pub((char*)MQTTRF2string.c_str(), (char*)MQTTdimLevel.c_str());
@@ -255,27 +234,23 @@ void MQTTtoRF2(char* topicOri, char* datacallback) {
     }
   }
 #    ifdef ZradioCC1101
-  ELECHOUSE_cc1101.SetRx(receiveMhz); // set Receive on
-  NewRemoteReceiver::enable();
+  ELECHOUSE_cc1101.SetRx(RFConfig.frequency); // set Receive on
 #    endif
+  enableActiveReceiver();
 }
 #  endif
 
 #  if jsonReceiving
-void MQTTtoRF2(char* topicOri, JsonObject& RF2data) { // json object decoding
+void XtoRF2(const char* topicOri, JsonObject& RF2data) { // json object decoding
 
   if (cmpToMainTopic(topicOri, subjectMQTTtoRF2)) {
     Log.trace(F("MQTTtoRF2 json" CR));
     int boolSWITCHTYPE = RF2data["switchType"] | 99;
     bool success = false;
     if (boolSWITCHTYPE != 99) {
-#    ifdef ZradioCC1101
-      NewRemoteReceiver::disable();
-      disableActiveReceiver();
-      ELECHOUSE_cc1101.Init();
+      disableCurrentReceiver();
       pinMode(RF_EMITTER_GPIO, OUTPUT);
-      ELECHOUSE_cc1101.SetTx(CC1101_FREQUENCY); // set Transmit on
-#    endif
+      initCC1101();
       Log.trace(F("MQTTtoRF2 switch type ok" CR));
       bool isDimCommand = boolSWITCHTYPE == 2;
       unsigned long valueCODE = RF2data["address"];
@@ -291,7 +266,6 @@ void MQTTtoRF2(char* topicOri, JsonObject& RF2data) { // json object decoding
           valueUNIT = 0;
         if (valuePERIOD == 0)
           valuePERIOD = 272;
-        NewRemoteReceiver::disable();
         NewRemoteTransmitter transmitter(valueCODE, RF_EMITTER_GPIO, valuePERIOD, RF2_EMITTER_REPEAT);
         Log.trace(F("Sending" CR));
         if (valueGROUP) {
@@ -308,65 +282,38 @@ void MQTTtoRF2(char* topicOri, JsonObject& RF2data) { // json object decoding
           }
         }
         Log.notice(F("MQTTtoRF2 OK" CR));
-        NewRemoteReceiver::enable();
 
         success = true;
       }
     }
-    if (RF2data.containsKey("active")) {
-      Log.trace(F("RF2 active:" CR));
-      activeReceiver = ACTIVE_RF2;
-      success = true;
-    }
-#    ifdef ZradioCC1101 // set Receive on and Transmitt off
-    float tempMhz = RF2data["mhz"];
-    if (RF2data.containsKey("mhz") && validFrequency(tempMhz)) {
-      receiveMhz = tempMhz;
-      Log.notice(F("Receive mhz: %F" CR), receiveMhz);
-      success = true;
-    }
-#    endif
     if (success) {
-      pub(subjectGTWRF2toMQTT, RF2data); // we acknowledge the sending by publishing the value to an acknowledgement topic, for the moment even if it is a signal repetition we acknowledge also
+      // we acknowledge the sending by publishing the value to an acknowledgement topic, for the moment even if it is a signal repetition we acknowledge also
+      RF2data["origin"] = subjectRF2toMQTT;
+      enqueueJsonObject(RF2data);
     } else {
-#    ifndef ARDUINO_AVR_UNO // Space issues with the UNO
       pub(subjectGTWRF2toMQTT, "{\"Status\": \"Error\"}"); // Fail feedback
-#    endif
       Log.error(F("MQTTtoRF2 failed json read" CR));
     }
-    enableActiveReceiver(false);
+    enableActiveReceiver();
   }
 }
 #  endif
 
 void disableRF2Receive() {
   Log.trace(F("disableRF2Receive" CR));
-  NewRemoteReceiver::deinit();
-  NewRemoteReceiver::init(-1, 2, rf2Callback); // mark _interupt with -1
-  NewRemoteReceiver::deinit();
+  NewRemoteReceiver::disable();
 }
 
 void enableRF2Receive() {
-#  ifdef ZradioCC1101
-  Log.notice(F("Switching to RF2 Receiver: %F" CR), receiveMhz);
-#  else
-  Log.notice(F("Switching to RF2 Receiver" CR));
-#  endif
-#  ifdef ZgatewayPilight
-  disablePilightReceive();
-#  endif
-#  ifdef ZgatewayRTL_433
-  disableRTLreceive();
-#  endif
-#  ifdef ZgatewayRF
-  disableRFReceive();
-#  endif
-
-#  ifdef ZradioCC1101
-  ELECHOUSE_cc1101.Init();
-  ELECHOUSE_cc1101.SetRx(receiveMhz); // set Receive on
-#  endif
+  Log.trace(F("enableRF2Receive" CR));
   NewRemoteReceiver::init(RF_RECEIVER_GPIO, 2, rf2Callback);
+
+  Log.notice(F("RF_EMITTER_GPIO: %d " CR), RF_EMITTER_GPIO);
+  Log.notice(F("RF_RECEIVER_GPIO: %d " CR), RF_RECEIVER_GPIO);
+  Log.trace(F("ZgatewayRF2 command topic: %s%s%s" CR), mqtt_topic, gateway_name, subjectMQTTtoRF2);
+  pinMode(RF_EMITTER_GPIO, OUTPUT);
+  digitalWrite(RF_EMITTER_GPIO, LOW);
+  Log.trace(F("ZgatewayRF2 setup done " CR));
 }
 
 #endif

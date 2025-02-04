@@ -1,5 +1,5 @@
 /*
-  OpenMQTTGateway  - ESP8266 or Arduino program for home automation
+  Theengs OpenMQTTGateway - We Unite Sensors in One Open-Source Interface
 
    Act as a wifi or ethernet gateway between your RF/infrared IR signal  and a MQTT broker
    Send and receiving command by MQTT
@@ -66,7 +66,6 @@ uint32_t gc_checksum() {
   return checksum;
 }
 
-#  if defined(ESP8266) || defined(ESP32)
 void eeprom_setup() {
   EEPROM.begin(4096);
   pGC = (struct _GLOBAL_CONFIG*)EEPROM.getDataPtr();
@@ -84,14 +83,11 @@ void eeprom_setup() {
     EEPROM.commit();
   }
 }
-#  endif
 
 RFM69 radio;
 
 void setupRFM69(void) {
-#  if defined(ESP8266) || defined(ESP32)
   eeprom_setup();
-#  endif
   int freq;
   static const char PROGMEM JSONtemplate[] =
       R"({"msgType":"config","freq":%d,"rfm69hcw":%d,"netid":%d,"power":%d})";
@@ -138,12 +134,11 @@ void setupRFM69(void) {
   }
 }
 
-bool RFM69toMQTT(void) {
+bool RFM69toX(void) {
   //check if something was received (could be an interrupt from the radio)
   if (radio.receiveDone()) {
-    Log.trace(F("Creating RFM69 buffer" CR));
-    StaticJsonDocument<JSON_MSG_BUFFER> jsonBuffer;
-    JsonObject RFM69data = jsonBuffer.to<JsonObject>();
+    StaticJsonDocument<JSON_MSG_BUFFER> RFM69dataBuffer;
+    JsonObject RFM69data = RFM69dataBuffer.to<JsonObject>();
     uint8_t data[RF69_MAX_DATA_LEN + 1]; // For the null character
     uint8_t SENDERID = radio.SENDERID;
     uint8_t DATALEN = radio.DATALEN;
@@ -167,7 +162,8 @@ bool RFM69toMQTT(void) {
     RFM69data["data"] = (char*)data;
     RFM69data["rssi"] = (int)radio.RSSI;
     RFM69data["senderid"] = (int)radio.SENDERID;
-    pub(buff, RFM69data);
+    RFM69data["origin"] = buff;
+    enqueueJsonObject(RFM69data);
 
     return true;
   } else {
@@ -176,7 +172,7 @@ bool RFM69toMQTT(void) {
 }
 
 #  if simpleReceiving
-void MQTTtoRFM69(char* topicOri, char* datacallback) {
+void XtoRFM69(const char* topicOri, const char* datacallback) {
   if (cmpToMainTopic(topicOri, subjectMQTTtoRFM69)) {
     Log.trace(F("MQTTtoRFM69 data analysis" CR));
     char data[RF69_MAX_DATA_LEN + 1];
@@ -205,7 +201,7 @@ void MQTTtoRFM69(char* topicOri, char* datacallback) {
 }
 #  endif
 #  if jsonReceiving
-void MQTTtoRFM69(char* topicOri, JsonObject& RFM69data) {
+void XtoRFM69(const char* topicOri, JsonObject& RFM69data) {
   if (cmpToMainTopic(topicOri, subjectMQTTtoRFM69)) {
     const char* data = RFM69data["data"];
     Log.trace(F("MQTTtoRFM69 json data analysis" CR));
@@ -216,7 +212,8 @@ void MQTTtoRFM69(char* topicOri, JsonObject& RFM69data) {
       if (radio.sendWithRetry(valueRCV, data, strlen(data), 10)) {
         Log.notice(F(" OK " CR));
         // Acknowledgement to the GTWRF topic
-        pub(subjectGTWRFM69toMQTT, RFM69data); // we acknowledge the sending by publishing the value to an acknowledgement topic, for the moment even if it is a signal repetition we acknowledge also
+        RFM69data["origin"] = subjectGTWRFM69toMQTT;
+        enqueueJsonObject(RFM69data);
       } else {
         Log.error(F("MQTTtoRFM69 sending failed" CR));
       }
